@@ -3,11 +3,35 @@ import "webrtc-adapter"; // cross-browser shim — patches RTCPeerConnection glo
 import { socket } from "../socket";
 
 // ── ICE Config ─────────────────────────────────────────────────────────────
+// STUN: discovers your public IP (works on same network)
+// TURN: relays media when direct P2P is blocked (required for phone ↔ desktop
+//       across different networks / mobile data + Wi-Fi)
 const ICE_CONFIG = {
   iceServers: [
+    // Google STUN (fast, free, no relay)
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
+    // Open Relay STUN
+    { urls: "stun:openrelay.metered.ca:80" },
+    // Open Relay TURN — UDP (fastest relay path)
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    // Open Relay TURN — TCP (fallback when UDP is blocked)
+    {
+      urls: "turn:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+    // Open Relay TURN — TLS over port 443 (works through strict firewalls)
+    {
+      urls: "turns:openrelay.metered.ca:443",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ],
   iceCandidatePoolSize: 10,
   bundlePolicy: "max-bundle",

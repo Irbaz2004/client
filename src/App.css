@@ -236,11 +236,65 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
   border:2px solid var(--bg);
 }
 
-@media (max-width:520px) {
-  .lobby-card { width:94vw; padding:32px 22px; }
+/* ── MOBILE ──────────────────────────────────── */
+@media (max-width:600px) {
+  /* Lobby */
+  .lobby-card { width:94vw; padding:30px 18px; border-radius:20px; }
   .field-row { grid-template-columns:1fr; }
-  .video-pip { width:140px; height:88px; }
+  .feature-grid { grid-template-columns:1fr 1fr; }
+  .lobby-title { font-size:1.5rem; }
+
+  /* Call header – hide logo text so Room ID fits */
+  .logo-sm { display:none; }
+  .call-header { padding:10px 12px; height:50px; gap:6px; }
+  .room-badge { padding:4px 8px; gap:5px; }
+  .room-id { font-size:.75rem; }
+  .room-label { display:none; }
+  .status-pill { font-size:.62rem; padding:3px 8px; }
+  .net-label { display:none; }
+
+  /* Video area */
+  .video-area { flex-direction:column; }
+
+  /* PiP — move above controls so it doesn't overlap */
+  .video-pip {
+    width:120px; height:76px;
+    bottom:96px;   /* clear the controls bar */
+    right:10px;
+    border-radius:10px;
+  }
+
+  /* Controls — wrap to 2 rows, smaller buttons */
+  .controls {
+    flex-wrap:wrap;
+    height:auto;
+    gap:8px;
+    padding:10px 12px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px));
+    justify-content:center;
+  }
+  .ctrl {
+    width:54px; height:54px;
+    border-radius:14px;
+    font-size:.55rem;
+    gap:4px;
+  }
+  .ctrl span { font-size:.5rem; }
+  .ctrl-end {
+    width:60px; height:60px;
+  }
+
+  /* Chat */
   .chat-panel { width:100%; }
-  .ctrl { width:56px; height:56px; border-radius:14px; }
-  .ctrl-end { width:64px; height:64px; }
+
+  /* Placeholder text */
+  .vid-placeholder p { font-size:.78rem; }
+}
+
+/* Very small screens (< 380px) */
+@media (max-width:380px) {
+  .ctrl { width:48px; height:48px; border-radius:12px; }
+  .ctrl-end { width:54px; height:54px; }
+  .video-pip { width:100px; height:64px; bottom:90px; right:8px; }
+  .lobby-card { padding:24px 14px; }
 }
