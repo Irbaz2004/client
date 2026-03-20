@@ -21,11 +21,11 @@
 }
 
 html, body, #root { height: 100%; }
-body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; overflow-y: auto; }
 
 /* ── BG ──────────────────────────────────────── */
 .app {
-  position: relative; height: 100vh; width: 100vw;
+  position: relative; min-height: 100dvh; width: 100vw;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
 .bg-blob { position: fixed; border-radius: 50%; filter: blur(90px); opacity: 0.15; pointer-events: none; z-index: 0; }
@@ -86,7 +86,7 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
 }
 
 /* ── CALL SCREEN ─────────────────────────────── */
-.call-screen { position:relative; z-index:10; display:flex; flex-direction:column; width:100vw; height:100vh; }
+.call-screen { position:relative; z-index:10; display:flex; flex-direction:column; width:100vw; height:100dvh; }
 
 .call-header {
   display:flex; align-items:center; justify-content:space-between;
@@ -254,24 +254,29 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-s
   .net-label { display:none; }
 
   /* Video area */
-  .video-area { flex-direction:column; }
+  .video-area { flex-direction:column; overflow:visible; }
 
   /* PiP — move above controls so it doesn't overlap */
   .video-pip {
     width:120px; height:76px;
-    bottom:96px;   /* clear the controls bar */
+    bottom:106px;   /* clear the controls bar (controls height ~96px + gap) */
     right:10px;
     border-radius:10px;
+    z-index:21;
   }
 
-  /* Controls — wrap to 2 rows, smaller buttons */
+  /* Controls — always visible, wraps to 2 rows, smaller buttons */
   .controls {
     flex-wrap:wrap;
     height:auto;
+    min-height:72px;
     gap:8px;
     padding:10px 12px;
     padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px));
     justify-content:center;
+    flex-shrink:0;   /* never compress this row */
+    position:relative;
+    z-index:30;
   }
   .ctrl {
     width:54px; height:54px;

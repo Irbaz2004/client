@@ -4,62 +4,31 @@ import { socket } from "../socket";
 
 // ── ICE Config ─────────────────────────────────────────────────────────────
 // STUN: discovers your public IP (works on same network)
-// TURN: relays media when direct P2P is blocked (required for phone ↔ desktop
-//       across different networks / mobile data + Wi-Fi)
+// TURN: relays media when direct P2P fails (required across different networks)
 const ICE_CONFIG = {
   iceServers: [
-    // Google STUN (fast, free, no relay)
+    // Google STUN
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
     { urls: "stun:stun2.l.google.com:19302" },
-    // Open Relay STUN
+    // Open Relay STUN + TURN (free, no signup)
     { urls: "stun:openrelay.metered.ca:80" },
-    // Open Relay TURN — UDP (fastest relay path)
-    {
-      urls: "turn:openrelay.metered.ca:80",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    // Open Relay TURN — TCP (fallback when UDP is blocked)
-    {
-      urls: "turn:openrelay.metered.ca:443",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
-    // Open Relay TURN — TLS over port 443 (works through strict firewalls)
-    {
-      urls: "turns:openrelay.metered.ca:443",
-      username: "openrelayproject",
-      credential: "openrelayproject",
-    },
+    { urls: "turn:openrelay.metered.ca:80",  username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+    { urls: "turns:openrelay.metered.ca:443",username: "openrelayproject", credential: "openrelayproject" },
+    // FreeStan TURN (second free fallback)
+    { urls: "stun:freestun.net:3479" },
+    { urls: "turn:freestun.net:3479",  username: "free", credential: "free" },
+    { urls: "turns:freestun.net:5350", username: "free", credential: "free" },
   ],
   iceCandidatePoolSize: 10,
   bundlePolicy: "max-bundle",
   rtcpMuxPolicy: "require",
 };
 
-// ── Preferred video codec (VP9 > VP8 > H264) ───────────────────────────────
-function preferVideoCodec(sdp, codec = "VP9") {
-  const lines = sdp.split("\n");
-  const videoIdx = lines.findIndex((l) => l.startsWith("m=video"));
-  if (videoIdx === -1) return sdp;
-
-  const codecRegex = new RegExp(`a=rtpmap:(\\d+) ${codec}/`, "i");
-  let payloadType = null;
-  for (const line of lines) {
-    const m = line.match(codecRegex);
-    if (m) { payloadType = m[1]; break; }
-  }
-  if (!payloadType) return sdp;
-
-  // Reorder payload types so preferred codec is first
-  const mLine = lines[videoIdx];
-  const parts = mLine.trim().split(" ");
-  const header = parts.slice(0, 3);
-  const payloads = parts.slice(3).filter((p) => p !== payloadType);
-  lines[videoIdx] = [...header, payloadType, ...payloads].join(" ");
-  return lines.join("\n");
-}
+// NOTE: VP9 codec preference removed — iOS Safari & many Android browsers
+// don't support VP9 in WebRTC. Forcing it breaks the call on mobile.
+// Let the browser negotiate the best supported codec automatically.
 
 // ── Apply bandwidth constraints via SDP ────────────────────────────────────
 function applyBandwidth(sdp, audioBW = 50, videoBW = 1500) {
@@ -190,7 +159,12 @@ export function useWebRTC({ roomId, userName, localVideoRef, remoteVideoRef, onS
     };
 
     peer.ontrack = (e) => {
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = e.streams[0];
+        // iOS Safari requires explicit .play() — autoPlay alone is not enough
+        // for remotely-set srcObject on unmuted video elements.
+        remoteVideoRef.current.play().catch(() => {});
+      }
       onStatusChange("connected");
       startStatsPolling();
     };
@@ -211,42 +185,44 @@ export function useWebRTC({ roomId, userName, localVideoRef, remoteVideoRef, onS
 
   // ── Get local camera/mic with noise suppression ──────────
   const startLocalStream = useCallback(async () => {
+    // Use relaxed constraints so mobile cameras (especially iOS) don't reject
     const raw = await navigator.mediaDevices.getUserMedia({
       video: {
-        width: { ideal: 1280, max: 1920 },
-        height: { ideal: 720, max: 1080 },
-        frameRate: { ideal: 30, max: 60 },
+        width:  { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 24 },
         facingMode: "user",
       },
       audio: {
         echoCancellation: true,
-        noiseSuppression: true,  // browser native
+        noiseSuppression: true,
         autoGainControl: true,
-        sampleRate: 48000,
-        channelCount: 1,
       },
     });
 
     // Apply Web Audio noise suppression on top of browser native
     const processed = await applyNoiseSuppression(raw);
     localStreamRef.current = processed;
-    if (localVideoRef.current) localVideoRef.current.srcObject = processed;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = processed;
+      localVideoRef.current.play().catch(() => {}); // iOS explicit play
+    }
     return processed;
   }, [localVideoRef]);
 
-  // ── Create offer with codec + bandwidth optimization ─────
+  // ── Create offer (no forced codec — let browser negotiate) ──
   const createOptimizedOffer = useCallback(async (peer) => {
-    let offer = await peer.createOffer({
+    const offer = await peer.createOffer({
       offerToReceiveAudio: true,
       offerToReceiveVideo: true,
     });
-    // Prefer VP9 codec
-    offer = new RTCSessionDescription({
+    // Apply bandwidth limits only; do NOT force VP9 — iOS doesn't support it
+    const optimized = new RTCSessionDescription({
       type: offer.type,
-      sdp: applyBandwidth(preferVideoCodec(offer.sdp, "VP9")),
+      sdp: applyBandwidth(offer.sdp),
     });
-    await peer.setLocalDescription(offer);
-    return offer;
+    await peer.setLocalDescription(optimized);
+    return optimized;
   }, []);
 
   // ── Join room ────────────────────────────────────────────
@@ -355,9 +331,10 @@ export function useWebRTC({ roomId, userName, localVideoRef, remoteVideoRef, onS
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
 
       let answer = await peer.createAnswer();
+      // Apply bandwidth only — no VP9 forcing for mobile compatibility
       answer = new RTCSessionDescription({
         type: answer.type,
-        sdp: applyBandwidth(preferVideoCodec(answer.sdp, "VP9")),
+        sdp: applyBandwidth(answer.sdp),
       });
       await peer.setLocalDescription(answer);
       socket.emit("answer", { answer, roomId });
